@@ -105,7 +105,7 @@ LOW_PERFORMANCE_VALUES = [
 
 def clean_column_name(col: str) -> str:
     """
-    Google広告 CSV의 컬럼명에 포함될 수 있는 공백, BOM, 따옴표 등을 정리합니다.
+    Google広告 CSVのカラム名に含まれるBOM、空白、引用符などを整理します。
     """
     col = str(col)
     col = col.replace("\ufeff", "")
@@ -117,7 +117,7 @@ def clean_column_name(col: str) -> str:
 
 def normalize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    DataFrame의 컬럼명을 정리합니다.
+    DataFrameのカラム名を正規化します。
     """
     df = df.copy()
     df.columns = [clean_column_name(c) for c in df.columns]
@@ -126,8 +126,8 @@ def normalize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def detect_header_row(lines: list[str]) -> int:
     """
-    Google広告 CSV 상단에 메타 정보가 붙는 경우가 있어,
-    실제 헤더 행을 찾아냅니다.
+    Google広告CSVの上部にレポート名・期間などのメタ情報がある場合、
+    実際のヘッダー行を探します。
     """
     header_keywords = [
         "アセット",
@@ -143,7 +143,6 @@ def detect_header_row(lines: list[str]) -> int:
     for i, line in enumerate(lines):
         hit_count = sum(1 for keyword in header_keywords if keyword in line)
 
-        # 광고 에셋 리포트 헤더일 가능성이 높은 행
         if hit_count >= 2:
             return i
 
@@ -152,7 +151,7 @@ def detect_header_row(lines: list[str]) -> int:
 
 def try_read_csv_text(text: str, sep: str) -> Optional[pd.DataFrame]:
     """
-    주어진 text와 separator로 pandas read_csv를 시도합니다.
+    指定した文字列と区切り文字でCSV/TSV読み込みを試します。
     """
     lines = text.splitlines()
     if not lines:
@@ -174,11 +173,9 @@ def try_read_csv_text(text: str, sep: str) -> Optional[pd.DataFrame]:
 
         df = normalize_dataframe_columns(df)
 
-        # 1열만 읽힌 경우는 separator 오판 가능성이 높음
         if df.empty or len(df.columns) <= 1:
             return None
 
-        # 완전히 빈 컬럼 제거
         df = df.dropna(axis=1, how="all")
 
         return df
@@ -189,11 +186,11 @@ def try_read_csv_text(text: str, sep: str) -> Optional[pd.DataFrame]:
 
 def read_google_ads_csv(uploaded_file) -> Tuple[pd.DataFrame, dict]:
     """
-    Google広告 CSV/TSV를 최대한 안전하게 읽습니다.
-    - UTF-8, CP932, Shift-JIS, UTF-16
-    - comma, tab, semicolon
-    - 상단 메타 행 스킵
-    - bad line skip
+    Google広告 CSV/TSVを安全に読み込みます。
+    - UTF-8 / CP932 / Shift-JIS / UTF-16
+    - カンマ / タブ / セミコロン
+    - 上部メタ行スキップ
+    - 壊れた行はスキップ
     """
     raw = uploaded_file.getvalue()
 
@@ -218,7 +215,7 @@ def read_google_ads_csv(uploaded_file) -> Tuple[pd.DataFrame, dict]:
     for encoding in encodings:
         try:
             text = raw.decode(encoding)
-        except Exception as e:
+        except Exception:
             tried.append(f"{encoding}: decode failed")
             continue
 
@@ -251,15 +248,13 @@ def find_column(df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
     후보 컬럼명 중 실제 DataFrame에 존재하는 컬럼을 찾습니다.
     완전일치 우선, 그 다음 부분일치.
     """
-    normalized_columns = list(df.columns)
+    columns = list(df.columns)
 
-    # 완전일치
     for candidate in candidates:
-        if candidate in normalized_columns:
+        if candidate in columns:
             return candidate
 
-    # 부분일치
-    for col in normalized_columns:
+    for col in columns:
         for candidate in candidates:
             if candidate.lower() in col.lower():
                 return col
@@ -286,7 +281,7 @@ def get_required_columns(df: pd.DataFrame) -> dict:
 
 def is_low_performance(value) -> bool:
     """
-    パフォーマンス = 低 / Low を判定します.
+    パフォーマンス = 低 / Low を判定します。
     """
     text = str(value).strip()
     return text in LOW_PERFORMANCE_VALUES
@@ -294,7 +289,7 @@ def is_low_performance(value) -> bool:
 
 def is_target_asset_type(value) -> bool:
     """
-    広告見出し / 説明文 のみ対象にします.
+    広告見出し / 説明文 のみ対象にします。
     """
     text = str(value).strip()
     return any(keyword in text for keyword in TARGET_ASSET_TYPE_KEYWORDS)
@@ -302,7 +297,7 @@ def is_target_asset_type(value) -> bool:
 
 def filter_low_performance_assets(df: pd.DataFrame, columns: dict) -> pd.DataFrame:
     """
-    パフォーマンス評価が「低」の広告見出し / 説明文だけ抽出します.
+    パフォーマンス評価が「低」の広告見出し / 説明文だけ抽出します。
     """
     performance_col = columns.get("performance")
     asset_text_col = columns.get("asset_text")
@@ -321,8 +316,7 @@ def filter_low_performance_assets(df: pd.DataFrame, columns: dict) -> pd.DataFra
 
 def make_context_dataframe(df: pd.DataFrame, columns: dict) -> pd.DataFrame:
     """
-    GPTに渡す用に必要そうなカラムだけを抽出します。
-    컬럼이 없으면 있는 것만 사용합니다.
+    GPTに渡す用に、必要そうなカラムだけを抽出します。
     """
     selected_cols = []
 
@@ -342,9 +336,69 @@ def make_context_dataframe(df: pd.DataFrame, columns: dict) -> pd.DataFrame:
             selected_cols.append(col)
 
     if not selected_cols:
-        return df.head(100)
+        return df.head(120)
 
     return df[selected_cols].copy()
+
+
+# ============================================================
+# 문자수 제한 검증 함수
+# ============================================================
+
+def get_char_limit(asset_type: str) -> int:
+    """
+    Google広告の文字数制限。
+    広告見出し: 30文字
+    説明文: 90文字
+    """
+    asset_type = str(asset_type)
+
+    if "説明文" in asset_type or "Description" in asset_type:
+        return 90
+
+    return 30
+
+
+def count_ad_chars(text: str) -> int:
+    """
+    日本語1文字を1文字として数えます。
+    句読点、記号、スペースも1文字としてカウントします。
+    """
+    if text is None:
+        return 0
+
+    return len(str(text))
+
+
+def validate_replacement_text(text: str, asset_type: str) -> dict:
+    """
+    代替案がGoogle広告の文字数制限内か判定します。
+    """
+    limit = get_char_limit(asset_type)
+    length = count_ad_chars(text)
+
+    return {
+        "length": length,
+        "limit": limit,
+        "is_valid": length <= limit,
+        "status": "OK" if length <= limit else "文字数超過",
+    }
+
+
+def has_invalid_replacements(result_df: pd.DataFrame) -> bool:
+    """
+    生成結果に文字数超過が含まれているか確認します。
+    """
+    if result_df.empty:
+        return False
+
+    judge_cols = [col for col in result_df.columns if col.startswith("判定")]
+
+    for col in judge_cols:
+        if (result_df[col] == "文字数超過").any():
+            return True
+
+    return False
 
 
 # ============================================================
@@ -377,7 +431,6 @@ def extract_json_from_text(text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # 응답 중간에 JSON object가 섞인 경우 대비
     match = re.search(r"\{.*\}", text, flags=re.DOTALL)
     if match:
         return json.loads(match.group(0))
@@ -419,6 +472,14 @@ Google広告の広告アセットCSVを分析し、パフォーマンス評価�
 - クリック率だけでなく、CV意図も考慮してください。
 - 出力はJSONのみとしてください。
 
+文字数制限：
+- asset_type が「広告見出し」の場合、replacement_1 / replacement_2 / replacement_3 は必ず30文字以内にしてください。
+- asset_type が「説明文」の場合、replacement_1 / replacement_2 / replacement_3 は必ず90文字以内にしてください。
+- 日本語1文字を1文字として数えてください。
+- 句読点、記号、スペースも1文字として数えてください。
+- 30文字または90文字を超える案は絶対に出力しないでください。
+- 長くなりそうな場合は、短く自然な広告文に言い換えてください。
+
 認識した主要カラム：
 - アセット本文: {asset_text_col}
 - アセットタイプ: {asset_type_col}
@@ -456,28 +517,116 @@ CSV全体の文脈：
 """
 
 
-def generate_replacement_ideas(
-    api_key: str,
-    model: str,
-    context_df: pd.DataFrame,
-    low_df: pd.DataFrame,
+def build_repair_prompt(
+    result_df: pd.DataFrame,
     product_context: str,
     ng_words: str,
-    columns: dict,
-    image: Optional[Image.Image] = None,
-) -> Tuple[str, pd.DataFrame]:
+) -> str:
     """
-    OpenAI API를 호출하여 대체안을 생성합니다.
+    文字数超過が出た場合に、超過案だけ短縮させるためのプロンプトです。
+    """
+    result_csv = result_df.to_csv(index=False)
+
+    return f"""
+あなたはGoogle広告の広告文修正専門家です。
+
+以下の代替案のうち、判定が「文字数超過」になっているものを、
+同じ意味と訴求軸を保ったまま文字数制限内に短縮してください。
+
+ルール：
+- 広告見出しは30文字以内。
+- 説明文は90文字以内。
+- OKになっている案も、より自然に短くできる場合は調整してよいです。
+- ただし、元の訴求軸から外れないでください。
+- 日本語として自然な広告文にしてください。
+- 出力はJSONのみ。
+
+補足情報：
+{product_context}
+
+NG表現：
+{ng_words}
+
+修正対象：
+{result_csv}
+
+出力形式：
+{{
+  "summary": "修正後の要約",
+  "items": [
+    {{
+      "original_asset": "既存アセット",
+      "asset_type": "広告見出し or 説明文",
+      "issue": "問題推定",
+      "replacement_1": "代替案1",
+      "intent_1": "狙い1",
+      "replacement_2": "代替案2",
+      "intent_2": "狙い2",
+      "replacement_3": "代替案3",
+      "intent_3": "狙い3"
+    }}
+  ]
+}}
+"""
+
+
+def convert_items_to_dataframe(data: dict) -> Tuple[str, pd.DataFrame]:
+    """
+    OpenAIのJSONレスポンスを表示用DataFrameに変換し、
+    Python側で文字数検証を行います。
+    """
+    rows = []
+
+    for item in data.get("items", []):
+        asset_type = item.get("asset_type", "")
+
+        replacement_1 = item.get("replacement_1", "")
+        replacement_2 = item.get("replacement_2", "")
+        replacement_3 = item.get("replacement_3", "")
+
+        v1 = validate_replacement_text(replacement_1, asset_type)
+        v2 = validate_replacement_text(replacement_2, asset_type)
+        v3 = validate_replacement_text(replacement_3, asset_type)
+
+        rows.append(
+            {
+                "既存アセット": item.get("original_asset", ""),
+                "タイプ": asset_type,
+                "問題推定": item.get("issue", ""),
+
+                "代替案1": replacement_1,
+                "文字数1": f"{v1['length']} / {v1['limit']}",
+                "判定1": v1["status"],
+                "狙い1": item.get("intent_1", ""),
+
+                "代替案2": replacement_2,
+                "文字数2": f"{v2['length']} / {v2['limit']}",
+                "判定2": v2["status"],
+                "狙い2": item.get("intent_2", ""),
+
+                "代替案3": replacement_3,
+                "文字数3": f"{v3['length']} / {v3['limit']}",
+                "判定3": v3["status"],
+                "狙い3": item.get("intent_3", ""),
+            }
+        )
+
+    result_df = pd.DataFrame(rows)
+    summary = data.get("summary", "")
+
+    return summary, result_df
+
+
+def call_openai_json(
+    api_key: str,
+    model: str,
+    prompt: str,
+    image: Optional[Image.Image] = None,
+) -> dict:
+    """
+    OpenAI APIを呼び出してJSONレスポンスを受け取ります。
     """
     client = OpenAI(api_key=api_key)
-
-    prompt = build_prompt(
-        context_df=context_df,
-        low_df=low_df,
-        product_context=product_context,
-        ng_words=ng_words,
-        columns=columns,
-    )
 
     content = [
         {
@@ -505,26 +654,60 @@ def generate_replacement_ideas(
         ],
     )
 
-    data = extract_json_from_text(response.output_text)
+    return extract_json_from_text(response.output_text)
 
-    rows = []
-    for item in data.get("items", []):
-        rows.append(
-            {
-                "既存アセット": item.get("original_asset", ""),
-                "タイプ": item.get("asset_type", ""),
-                "問題推定": item.get("issue", ""),
-                "代替案1": item.get("replacement_1", ""),
-                "狙い1": item.get("intent_1", ""),
-                "代替案2": item.get("replacement_2", ""),
-                "狙い2": item.get("intent_2", ""),
-                "代替案3": item.get("replacement_3", ""),
-                "狙い3": item.get("intent_3", ""),
-            }
+
+def generate_replacement_ideas(
+    api_key: str,
+    model: str,
+    context_df: pd.DataFrame,
+    low_df: pd.DataFrame,
+    product_context: str,
+    ng_words: str,
+    columns: dict,
+    image: Optional[Image.Image] = None,
+    auto_repair: bool = True,
+) -> Tuple[str, pd.DataFrame]:
+    """
+    OpenAI APIを呼び出し、代替案を生成します。
+    文字数超過がある場合は、1回だけ自動修正を試みます。
+    """
+    prompt = build_prompt(
+        context_df=context_df,
+        low_df=low_df,
+        product_context=product_context,
+        ng_words=ng_words,
+        columns=columns,
+    )
+
+    data = call_openai_json(
+        api_key=api_key,
+        model=model,
+        prompt=prompt,
+        image=image,
+    )
+
+    summary, result_df = convert_items_to_dataframe(data)
+
+    if auto_repair and has_invalid_replacements(result_df):
+        repair_prompt = build_repair_prompt(
+            result_df=result_df,
+            product_context=product_context,
+            ng_words=ng_words,
         )
 
-    result_df = pd.DataFrame(rows)
-    summary = data.get("summary", "")
+        repaired_data = call_openai_json(
+            api_key=api_key,
+            model=model,
+            prompt=repair_prompt,
+            image=None,
+        )
+
+        repaired_summary, repaired_df = convert_items_to_dataframe(repaired_data)
+
+        if not repaired_df.empty:
+            summary = repaired_summary or summary
+            result_df = repaired_df
 
     return summary, result_df
 
@@ -546,6 +729,12 @@ with st.sidebar:
         "Model",
         value="gpt-4.1-mini",
         help="利用可能なOpenAIモデル名を入力してください。",
+    )
+
+    auto_repair = st.checkbox(
+        "文字数超過を自動修正する",
+        value=True,
+        help="生成結果が文字数制限を超えた場合、1回だけ自動で短縮修正します。",
     )
 
     st.header("補足情報")
@@ -662,6 +851,7 @@ Google広告から出力したファイルに、上部メタ情報・タブ区�
                     ng_words=ng_words,
                     columns=columns,
                     image=image,
+                    auto_repair=auto_repair,
                 )
 
                 st.subheader("全体診断")
@@ -669,6 +859,14 @@ Google広告から出力したファイルに、上部メタ情報・タブ区�
 
                 st.subheader("代替案")
                 st.dataframe(result_df, use_container_width=True)
+
+                if has_invalid_replacements(result_df):
+                    st.warning(
+                        "一部の代替案がまだ文字数制限を超えています。"
+                        "判定が「文字数超過」の案は手動で短縮してください。"
+                    )
+                else:
+                    st.success("すべての代替案が文字数制限内です。")
 
                 csv_data = result_df.to_csv(index=False).encode("utf-8-sig")
 
